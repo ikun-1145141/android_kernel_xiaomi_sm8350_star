@@ -3834,7 +3834,16 @@ void dsi_panel_set_fod_ui(struct dsi_panel *panel, bool status)
 	panel->fod_ui = status;
 	mutex_unlock(&panel->panel_lock);
 
-	sysfs_notify(&panel->parent->kobj, NULL, "fod_ui");
+	/*
+	 * Meme precaution que dans dsi_display_set_mode() : `panel->parent` peut
+	 * valoir NULL ou un ERR_PTR sur le panneau secondaire du Mi 11 Ultra, et
+	 * `struct device` commençant par son `struct kobject`, &parent->kobj vaut
+	 * alors exactement le code d'erreur. L'oops se produit dans sysfs_notify,
+	 * loin de la vraie cause, et CONFIG_PANIC_ON_OOPS le transforme en reset
+	 * materiel sans trace. Voir le commentaire detaille dans dsi_display.c.
+	 */
+	if (!IS_ERR_OR_NULL(panel->parent))
+		sysfs_notify(&panel->parent->kobj, NULL, "fod_ui");
 }
 
 static int dsi_panel_sysfs_init(struct dsi_panel *panel)

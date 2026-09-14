@@ -7621,7 +7621,41 @@ int dsi_display_set_mode(struct dsi_display *display,
 		notify_data.data = &fps;
 		notify_data.disp_id = mi_get_disp_id(display);
 		mi_disp_notifier_call_chain(MI_DISP_FPS_CHANGE_EVENT, &notify_data);
-		sysfs_notify(&display->dev->kobj, NULL, "dynamic_fps");
+		/*
+		 * display->dev n'est renseigne que pour l'afficheur principal.
+		 * Sur le Mi 11 Ultra le panneau arriere (126x294) passe ici des
+		 * le premier changement de frequence et deferencait un pointeur
+		 * nul, ce qui tuait le demarrage :
+		 *
+		 *   [drm:dsi_display_set_mode] hactive=126, vactive=294, fps=60
+		 *   Unable to handle kernel NULL pointer dereference at 0x1d
+		 *   pc : sysfs_notify+0x10  lr : dsi_display_set_mode+0x8b0
+		 *   Kernel panic - not syncing: Fatal exception
+		 *
+		 * CONFIG_PANIC_ON_OOPS transforme l'oops en panique, et le
+		 * gestionnaire de redemarrage la conclut par une morsure du
+		 * chien de garde : d'ou un reset sans trace exploitable.
+		 *
+		 * 2026-08-12 : le test `if (display->dev)` ne suffisait PAS.
+		 * La trace capturee sur la partition logdump donne
+		 *
+		 *   x0 : ffffffffffffffed
+		 *   Call trace:
+		 *    sysfs_notify+0x10/0x8c
+		 *    dsi_display_set_mode+0x8b4/0x9e4 [msm_drm]
+		 *    dsi_bridge_pre_enable+0xb4/0x408 [msm_drm]
+		 *    drm_bridge_pre_enable+0x4c/0x80
+		 *    complete_commit+0x368/0xa60 [msm_drm]
+		 *
+		 * 0xffffffffffffffed vaut -19, soit ERR_PTR(-ENODEV) : le champ
+		 * n'est pas nul, il porte un code d'erreur encode. `struct device`
+		 * commence par son `struct kobject kobj`, donc &dev->kobj vaut
+		 * exactement dev et l'adresse fautive est le code d'erreur lui-meme.
+		 * Un simple test de nullite laisse evidemment passer ce cas :
+		 * il faut IS_ERR_OR_NULL.
+		 */
+		if (!IS_ERR_OR_NULL(display->dev))
+			sysfs_notify(&display->dev->kobj, NULL, "dynamic_fps");
 	}
 
 	memcpy(display->panel->cur_mode, &adj_mode, sizeof(adj_mode));

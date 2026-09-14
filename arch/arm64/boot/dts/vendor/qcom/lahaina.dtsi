@@ -391,6 +391,32 @@
 		reg = <0x0 0xd8800000 0x0 0xA000000>;
 	};
 
+	/*
+	 * Journal persistant (pstore/ramoops).
+	 *
+	 * Conserve la console du noyau a travers un reset chaud : la memoire
+	 * n'est pas remise a zero par le chargeur, donc la fin du demarrage qui
+	 * meurt reste relisible au demarrage suivant sous /sys/fs/pstore
+	 * (console-ramoops-0), y compris depuis le recovery.
+	 *
+	 * Indispensable ici : le reset ~17 s est silencieux (aucune trace ne
+	 * survit dans /data ni /metadata), ce qui empechait jusqu'a present
+	 * d'en connaitre la cause reelle.
+	 *
+	 * Zone choisie dans le trou entre pil_modem (fin 0x9f000000) et
+	 * removed_mem (debut 0xd8800000) ; verifiee libre sur lahaina/star.
+	 * Pas de no-map : le pilote doit pouvoir mapper la region.
+	 * mem-type = 2 (MEM_TYPE_NORMAL), comme les plateformes soeurs.
+	 */
+	ramoops_mem: ramoops {
+		compatible = "ramoops";
+		reg = <0x0 0xa9000000 0x0 0x400000>;
+		console-size = <0x100000>;
+		pmsg-size = <0x200000>;
+		record-size = <0x40000>;
+		mem-type = <2>;
+	};
+
 	adsp_mem: adsp_region {
 		compatible = "shared-dma-pool";
 		alloc-ranges = <0x0 0x00000000 0x0 0xffffffff>;
@@ -488,7 +514,18 @@
 		size = <0x0 0x1C00000>;
 	};
 
-	splash_memory:splash_region {
+	/* MESURE 2026-08-11 : nom du noeud volontairement change pour desactiver
+	 * la reprise de l'image du chargeur d'amorcage. sde_kms cherche un noeud
+	 * nomme exactement "splash_region" ; ne le trouvant pas, il renonce au
+	 * cont_splash et le noyau initialise le panneau lui-meme, au lieu de
+	 * reprendre l'etat laisse par le chargeur.
+	 *
+	 * Symptome vise : l'ecran principal affiche la premiere image de
+	 * LineageOS puis n'est plus rafraichi, alors que l'animation de
+	 * demarrage continue de tourner cote logiciel. Le panneau reste dans la
+	 * configuration du chargeur d'amorcage, que LineageOS veut passer a
+	 * 120 Hz. A RETABLIR si la mesure est negative. */
+	splash_memory:splash_region_off {
 		reg = <0x0 0xea600000 0x0 0x02300000>;
 		label = "cont_splash_region";
 	};

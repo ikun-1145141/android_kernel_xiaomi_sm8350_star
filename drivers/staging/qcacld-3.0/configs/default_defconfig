@@ -628,14 +628,34 @@ BUILD_DEBUG_VERSION := y
 #Enable this flag to build driver in diag version
 BUILD_DIAG_VERSION := y
 
+# PANIC_ON_BUG force a n sur star — 2026-08-12.
+#
+# CONFIG_SLUB_DEBUG=y sur cette cible (herite de lahaina-qgki_defconfig), donc
+# la premiere branche s'appliquait et le pilote se compilait avec
+# -DPANIC_ON_BUG. Le journal noyau l'affiche a chaque demarrage :
+#
+#   wlan: Loading driver v2.0.8.34Z +PANIC_ON_BUG
+#
+# et les toutes dernieres lignes avant le reset sont invariablement la mise en
+# route du WLAN — regulateurs vdd-wlan-*, WLAN_EN GPIO, lien PCIe RC0, MHI
+# POWER_ON, chargement de amss.bin — puis plus rien. La minidump situe la
+# morsure du chien de garde une seconde apres.
+#
+# Avec PANIC_ON_BUG, la moindre assertion du pilote appelle BUG(), donc
+# panic(), que qcom_wdt_panic_handler convertit en morsure de chien de garde :
+# reset materiel immediat, aucune trace exploitable. C'est le pire
+# comportement possible pour diagnostiquer, et il n'a rien a faire sur un
+# appareil d'usage courant.
+#
+# WLAN_WARN_ON_ASSERT reste a y : une assertion produit alors un WARN_ON avec
+# la pile d'appel dans dmesg, et le systeme continue. Soit l'appareil demarre,
+# soit on obtient enfin la pile fautive. Dans les deux cas on avance.
+PANIC_ON_BUG := n
 ifeq ($(CONFIG_SLUB_DEBUG), y)
-	PANIC_ON_BUG := y
 	WLAN_WARN_ON_ASSERT := y
 else ifeq ($(CONFIG_PERF_DEBUG), y)
-	PANIC_ON_BUG := y
 	WLAN_WARN_ON_ASSERT := y
 else
-	PANIC_ON_BUG := n
 	WLAN_WARN_ON_ASSERT := n
 endif
 

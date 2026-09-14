@@ -1456,6 +1456,34 @@ struct subsys_device *subsys_register(struct subsys_desc *desc)
 	if (!subsys)
 		return ERR_PTR(-ENOMEM);
 
+	/*
+	 * Niveau de redemarrage par defaut : RELATED, pas SYSTEM.
+	 *
+	 * kzalloc laisse restart_level a 0, c'est-a-dire RESET_SOC. Le premier
+	 * plantage d'un sous-systeme passe alors par device_restart_work_hdlr()
+	 * et se termine en
+	 *     panic("subsys-restart: Resetting the SoC - %s crashed.")
+	 * Ce panic est ensuite converti en morsure de chien de garde par
+	 * qcom_wdt_panic_handler() : gel de l'userspace, reset materiel immediat,
+	 * aucun journal. C'est le symptome observe sur star (reset a ~17 s, sept
+	 * tentatives, puis fastboot) et la partition minidump le confirme — dix
+	 * enregistrements "WDT bite ... from VM 3", dont sept vers 24 s d'horloge
+	 * hyperviseur.
+	 *
+	 * init.qcom.rc essaie bien d'ecrire "related" dans les restart_level, mais
+	 * a `on early-boot`, vers 6 s, alors que les sous-systemes ne s'enregistrent
+	 * qu'a partir de 10-12 s (le modem sort de reset a 10,3 s). Ces ecritures
+	 * tombent dans le vide, silencieusement. Corriger le defaut ici est le seul
+	 * endroit ou la valeur est garantie posee avant tout plantage possible.
+	 *
+	 * Effet : un sous-systeme qui plante est redemarre isolement au lieu
+	 * d'emporter le SoC, et il laisse une trace NOMINATIVE
+	 * ("Restart sequence requested for <nom>") au lieu d'un reset muet.
+	 * L'espace utilisateur reste libre de remonter le niveau via
+	 * /sys/bus/msm_subsys/devices/subsys*\/restart_level.
+	 */
+	subsys->restart_level = RESET_SUBSYS_COUPLED;
+
 	subsys->desc = desc;
 	subsys->owner = desc->owner;
 	subsys->dev.parent = desc->dev;

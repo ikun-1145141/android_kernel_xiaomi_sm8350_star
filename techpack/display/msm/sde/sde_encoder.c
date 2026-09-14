@@ -4269,7 +4269,6 @@ static int _sde_encoder_reset_ctl_hw(struct drm_encoder *drm_enc)
 void sde_encoder_kickoff(struct drm_encoder *drm_enc, bool is_error,
 		bool config_changed)
 {
-	static bool first_run = true;
 	struct sde_encoder_virt *sde_enc;
 	struct sde_encoder_phys *phys;
 	unsigned int i;
@@ -4311,23 +4310,22 @@ void sde_encoder_kickoff(struct drm_encoder *drm_enc, bool is_error,
 	}
 
 	/*
-	 * Trigger a panel reset if this is the first kickoff and the refresh
-	 * rate is not 60 Hz
+	 * Hack amont retire (commit fc00ec7984ca "Trigger panel reset after
+	 * first kickoff on non-60 Hz") : il forcait DRM_EVENT_PANEL_DEAD apres
+	 * le premier kickoff des que le refresh n'etait pas 60 Hz, pour appliquer
+	 * la frequence choisie via la recuperation ESD (reset panneau).
+	 *
+	 * Sur le Mi 11 Ultra (star), l'ecran principal k2 est un panneau DSC
+	 * command-mode a 120 Hz : ce reset ESD force en pleine premiere
+	 * composition fige le DSI/DPU, et la morsure du watchdog hyperviseur
+	 * Gunyah redemarre l'appareil ~20 s apres l'accueil, sans aucune trace.
+	 * L'ecran arriere (60 Hz) n'etait pas concerne, d'ou son bon
+	 * fonctionnement. Le `static bool first_run`, partage entre les deux
+	 * afficheurs, rendait de plus le declenchement non deterministe.
+	 *
+	 * Le changement de frequence normal passe par dsi_display_set_mode ; ce
+	 * reset force n'est pas necessaire ici.
 	 */
-	if (cmpxchg(&first_run, true, false) &&
-		sde_enc->crtc->mode.vrefresh != 60) {
-		struct sde_connector *conn = container_of(phys->connector, struct sde_connector, base);
-		struct drm_event event = {
-			.type = DRM_EVENT_PANEL_DEAD,
-			.length = sizeof(bool)
-		};
-
-		conn->panel_dead = true;
-		event.type = DRM_EVENT_PANEL_DEAD;
-		event.length = sizeof(bool);
-		msm_mode_object_event_notify(&conn->base.base,
-			conn->base.dev, &event, (u8 *) &conn->panel_dead);
-	}
 
 	SDE_ATRACE_END("encoder_kickoff");
 }
