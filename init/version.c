@@ -16,6 +16,15 @@
 #include <linux/version.h>
 #include <linux/proc_ns.h>
 
+/*
+ * Keep generated UTS_RELEASE unchanged: it is compiled into
+ * VERMAGIC_STRING and must continue to match the vendor modules.  The
+ * initial UTS namespace is what uname(2), /proc/version and
+ * /proc/sys/kernel/osrelease expose to userspace, so brand only that field.
+ */
+#define NEKOMAKE_DISPLAY_RELEASE \
+	"5.4.302-ikun-NekoMake-Lineage-star-mars"
+
 #ifndef CONFIG_KALLSYMS
 #define version(a) Version_ ## a
 #define version_string(a) version(a)
@@ -29,7 +38,7 @@ struct uts_namespace init_uts_ns = {
 	.name = {
 		.sysname	= UTS_SYSNAME,
 		.nodename	= UTS_NODENAME,
-		.release	= UTS_RELEASE,
+		.release	= NEKOMAKE_DISPLAY_RELEASE,
 		.version	= UTS_VERSION,
 		.machine	= UTS_MACHINE,
 		.domainname	= UTS_DOMAINNAME,
